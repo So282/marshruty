@@ -2,6 +2,7 @@ import { FormEvent, useState, type ReactNode } from "react";
 
 type Role = "user" | "manager" | "admin";
 type View = "map" | "routes" | "create" | "profile" | "stats" | "reports" | "users";
+type Mood = "calm" | "explore" | "food";
 
 type IconName =
   | "arrow"
@@ -191,7 +192,8 @@ const places = [
   { icon: "landmark" as IconName, label: "Оранжерея", className: "place place--garden" },
 ];
 
-function MapArtwork({ routeReady }: { routeReady: boolean }) {
+function MapArtwork({ routeReady, radius }: { routeReady: boolean; radius: number }) {
+  const size = Math.min(radius * 22, 100);
   return (
     <div className="map-artwork">
       <svg className="map-base" preserveAspectRatio="none" viewBox="0 0 1400 900">
@@ -222,7 +224,10 @@ function MapArtwork({ routeReady }: { routeReady: boolean }) {
         </g>
         {routeReady && <path className="built-route" d="M700 475c-66-44-97-111-42-165 52-51 164-19 181-112 18-99 145-107 175-18 23 69-53 116-39 195 15 86-74 147-154 123-45-14-74-18-121-23Z" />}
       </svg>
-      <div className="radius-circle">
+      <div
+        className="radius-circle"
+        style={{ width: `${size}vw`, height: `${size}vw`, maxWidth: `${radius * 280}px`, maxHeight: `${radius * 280}px` }}
+      >
         <div className="user-location"><span className="user-pulse" /><Icon name="walk" size={22} /></div>
       </div>
       {places.map((place) => (
@@ -376,6 +381,7 @@ function UsersView() {
 function MapScreen({ initialRole, onLogout }: { initialRole: Role; onLogout: () => void }) {
   const [radius, setRadius] = useState(2);
   const [duration, setDuration] = useState("60 мин");
+  const [mood, setMood] = useState<Mood>("calm");
   const [routeReady, setRouteReady] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
   const [located, setLocated] = useState(false);
@@ -384,6 +390,13 @@ function MapScreen({ initialRole, onLogout }: { initialRole: Role; onLogout: () 
   const [notice, setNotice] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRoute, setSelectedRoute] = useState<(typeof routeCards)[number] | null>(null);
+
+  const moods: { id: Mood; label: string; icon: IconName }[] = [
+    { id: "calm", label: "Спокойно", icon: "park" },
+    { id: "explore", label: "Познавательно", icon: "landmark" },
+    { id: "food", label: "Вкусно", icon: "coffee" },
+  ];
+
   const searchResults = searchQuery.trim().length > 1
     ? routeCards.filter((route) => `${route.title} ${route.city}`.toLowerCase().includes(searchQuery.toLowerCase()))
     : [];
@@ -394,9 +407,14 @@ function MapScreen({ initialRole, onLogout }: { initialRole: Role; onLogout: () 
     setRouteReady(true);
   };
 
+  const buildRoute = () => {
+    setRouteReady(false);
+    window.setTimeout(() => setRouteReady(true), 40);
+  };
+
   return (
     <main className={`map-screen ${view !== "map" ? "map-screen--workspace" : ""}`}>
-      {view === "map" && <MapArtwork routeReady={routeReady} />}
+      {view === "map" && <MapArtwork routeReady={routeReady} radius={radius} />}
 
       <header className="map-header">
         <Brand />
@@ -436,11 +454,18 @@ function MapScreen({ initialRole, onLogout }: { initialRole: Role; onLogout: () 
         </div>
 
         <div className="setting-block">
-          <div className="setting-label"><span>Настроение</span><strong>Спокойно</strong></div>
+          <div className="setting-label"><span>Настроение</span><strong>{moods.find((m) => m.id === mood)?.label}</strong></div>
           <div className="mood-options">
-            <button className="active"><Icon name="park" /> Спокойно</button>
-            <button><Icon name="landmark" /> Познавательно</button>
-            <button><Icon name="coffee" /> Вкусно</button>
+            {moods.map((m) => (
+              <button
+                key={m.id}
+                className={mood === m.id ? "active" : ""}
+                onClick={() => { setMood(m.id); setRouteReady(false); }}
+                type="button"
+              >
+                <Icon name={m.icon} /> {m.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -448,7 +473,14 @@ function MapScreen({ initialRole, onLogout }: { initialRole: Role; onLogout: () 
           <div className="setting-label"><span>Сколько времени</span><strong>{duration}</strong></div>
           <div className="time-options">
             {["30 мин", "60 мин", "1,5 часа", "2+ часа"].map((time) => (
-              <button className={duration === time ? "active" : ""} key={time} onClick={() => setDuration(time)}>{time}</button>
+              <button
+                className={duration === time ? "active" : ""}
+                key={time}
+                onClick={() => { setDuration(time); setRouteReady(false); }}
+                type="button"
+              >
+                {time}
+              </button>
             ))}
           </div>
         </div>
@@ -458,7 +490,7 @@ function MapScreen({ initialRole, onLogout }: { initialRole: Role; onLogout: () 
           <div><Icon name="landmark" /><span><strong>5 мест</strong><small>по пути</small></span></div>
         </div>
 
-        <button className="primary-button build-button" onClick={() => setRouteReady(true)}>
+        <button className="primary-button build-button" onClick={buildRoute} type="button">
           <Icon name={routeReady ? "check" : "route"} />
           {routeReady ? "Маршрут готов" : "Построить маршрут"}
         </button>
@@ -477,7 +509,15 @@ function MapScreen({ initialRole, onLogout }: { initialRole: Role; onLogout: () 
           <span><Icon name="compass" /> Радиус поиска</span>
           <strong>{radius} км</strong>
         </div>
-        <input aria-label="Радиус поиска" max="5" min="1" onChange={(event) => setRadius(Number(event.target.value))} step="1" type="range" value={radius} />
+        <input
+          aria-label="Радиус поиска"
+          max="5"
+          min="1"
+          onChange={(event) => { setRadius(Number(event.target.value)); setRouteReady(false); }}
+          step="1"
+          type="range"
+          value={radius}
+        />
         <div className="range-labels"><span>1 км</span><span>5 км</span></div>
       </div>
 
